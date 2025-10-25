@@ -1,5 +1,9 @@
 #include "FSM.h"
 #include <Arduino.h>
+#include "syringe.h"
+#include "brakepress.h"
+#include "debubble.h"
+#include "detect.h"
 
 void InitializeFSM(FSMType *fsm) {
   if (!fsm) return;

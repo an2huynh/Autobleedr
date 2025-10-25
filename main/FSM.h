@@ -20,7 +20,6 @@ void InitializeFSM(FSMType *fsm);
 void OutputFunction(FSMType *fsm);
 void RequestStart(FSMType *fsm);
 
-// Abstract operations (now C++ implementations)
 bool ActuateSyringe(void);
 bool HandBrakePress(void);
 bool DeBubbler(void);

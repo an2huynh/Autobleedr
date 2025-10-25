@@ -1,19 +1,27 @@
 #include <Arduino.h>
 #include "FSM.h"
+#include "syringe.h"
+// #include "brakepress.h"
+// #include "debubble.h"
+// #include "detect.h"
 
-// Start pin (rising edge starts a cycle)
 static constexpr int PIN_START = 34;
-
 static FSMType g_fsm;
 
 void IRAM_ATTR onStartRise() { RequestStart(&g_fsm); }
 
 void setup() {
+  InitializeSyringePins();
+
   pinMode(PIN_START, INPUT);
   attachInterrupt(digitalPinToInterrupt(PIN_START), onStartRise, RISING);
+
   InitializeFSM(&g_fsm);
+
 }
 
 void loop() {
+
   OutputFunction(&g_fsm);
+
 }
