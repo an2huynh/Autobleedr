@@ -2,21 +2,24 @@
 #define SYRINGE_H_
 
 //GPIO Pins, 
-#define SYR_DIR_PIN 26 //1=extend, 0=contract.
-#define SYR_EN_PIN  27 //1=on, 0=off
+#define SYR_DIR_PIN 18 //1=extend, 0=contract.
+#define SYR_EN_PIN  19 //1=on, 0=off
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+// Test blink config
+#define SYR_TEST_LED_PIN       2   // or a specific GPIO number
+#define SYR_TEST_BLINK_HZ      5             // blink frequency
+#define SYR_TEST_DURATION_MS   2000          // total duration
 
 void InitializeSyringePins(void);
 void syringeExtend(int ms);
-void syringeContract(int ms);
+void syringeRetract(int ms);
+
+void setExtend(); // sets to extend/retract, WILL NOT STOP, must call setRetract() after
+void setRetract();
+
+void setEnable();
+void setDisable();
 
 bool ActuateSyringe(void);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

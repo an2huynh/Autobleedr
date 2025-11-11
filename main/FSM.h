@@ -13,16 +13,12 @@ typedef enum {
 
 typedef struct {
   FSMState CurrentState;
-  volatile bool startRequested;
+  volatile bool startRequested;   // consumed in IDLE to start a cycle
+  volatile bool abortRequested;   // set during any active state to go IDLE after step
 } FSMType;
 
 void InitializeFSM(FSMType *fsm);
 void OutputFunction(FSMType *fsm);
 void RequestStart(FSMType *fsm);
-
-bool ActuateSyringe(void);
-bool HandBrakePress(void);
-bool DeBubbler(void);
-bool ActuateSyringeCheckForBubbles(void);
 
 #endif
