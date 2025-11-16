@@ -1,6 +1,6 @@
 /* IR LED + Phototransistor (direct) — ESP32 / Arduino IDE
- * Relative-threshold version: triggers on ≥ MIN_RELATIVE_DELTA * baseline change.
- * Default: detect RISE; set DETECT_RISE=false to detect a DROP instead.
+ * Detects a change greater than ±5% from baseline (LED-on minus LED-off),
+ * regardless of the baseline being positive or negative.
  */
 
 #define IR_LED_PIN        25
@@ -14,26 +14,20 @@ const uint16_t LED_SETTLE_US          = 200;
 const uint8_t  SAMPLES_PER_PHASE      = 8;
 const uint16_t CAL_TIME_MS            = 3000;
 
-// Relative change: 0.15 = 15%
-const float    MIN_RELATIVE_DELTA     = 0.15f;
+// ±5% change detection
+const float    MIN_RELATIVE_DELTA     = 0.2f;
 
-// Noise/absolute safety floors (still applied)
-const float    THRESH_NOISE_MULT      = 6.0f;   // k·sigma
-const uint16_t THRESH_MIN_MARGIN      = 40;     // counts
+// Hysteresis + debounce
 const uint16_t HYSTERESIS_COUNTS      = 20;
 const uint8_t  DEBOUNCE_HITS_REQUIRED = 3;
 const uint8_t  DEBOUNCE_CLEAR_REQUIRED= 3;
 const uint16_t LOOP_PERIOD_MS         = 5;
 
-// Polarity: true  -> detect a RISE from baseline
-//           false -> detect a DROP from baseline
-const bool     DETECT_RISE            = true;
-
 // -------------------- RUNTIME STATE --------------------
-float    baseline = 0.0f;   // mean differenced signal at idle (LED contribution)
-float    noiseStd = 5.0f;   // stdev of differenced noise
-uint16_t threshUp = 0;      // baseline + margin
-uint16_t threshDn = 0;      // baseline - margin
+float    baseline = 0.0f;
+float    noiseStd = 5.0f;  // just for info printing
+float    threshUp = 0.0f;  // baseline + 5%
+float    threshDn = 0.0f;  // baseline - 5%
 bool     detected = false;
 uint8_t  hitCount = 0;
 uint8_t  clearCount = 0;
@@ -42,62 +36,55 @@ const float EMA_ALPHA = 0.25f;
 float emaDiff = 0.0f;
 
 // -------------------- HELPERS --------------------
-uint16_t readADC() { return analogRead(SENSOR_PIN); }
+uint16_t readADC() {
+  return analogRead(SENSOR_PIN);
+}
 
-// Ambient-cancelled signal: avg(ON) - avg(OFF)
+// LED ON/OFF differenced reading
 int16_t readDifferenced() {
+  // LED ON phase
   digitalWrite(IR_LED_PIN, HIGH);
   delayMicroseconds(LED_SETTLE_US);
   uint32_t sumOn = 0;
-  for (uint8_t i = 0; i < SAMPLES_PER_PHASE; ++i) sumOn += readADC();
+  for (uint8_t i = 0; i < SAMPLES_PER_PHASE; ++i) {
+    sumOn += readADC();
+  }
 
+  // LED OFF phase
   digitalWrite(IR_LED_PIN, LOW);
   delayMicroseconds(LED_SETTLE_US);
   uint32_t sumOff = 0;
-  for (uint8_t i = 0; i < SAMPLES_PER_PHASE; ++i) sumOff += readADC();
+  for (uint8_t i = 0; i < SAMPLES_PER_PHASE; ++i) {
+    sumOff += readADC();
+  }
 
   int32_t avgOn  = (int32_t)(sumOn  / SAMPLES_PER_PHASE);
   int32_t avgOff = (int32_t)(sumOff / SAMPLES_PER_PHASE);
   return (int16_t)(avgOn - avgOff);
 }
 
-// Compute symmetric thresholds around baseline using a relative margin
+// Compute ±5% thresholds (no clamping; allow negative baselines)
 void computeThresholds() {
-  // Relative margin: MIN_RELATIVE_DELTA * |baseline|
-  float relMargin = MIN_RELATIVE_DELTA * fabsf(baseline);
-
-  // Noise floor margin: k·sigma
-  float noiseMargin = THRESH_NOISE_MULT * noiseStd;
-
-  // Absolute floor in counts
-  float absFloor = (float)THRESH_MIN_MARGIN;
-
-  // Final margin is the max of all three
-  float margin = max(relMargin, max(noiseMargin, absFloor));
-
-  float up = baseline + margin;
-  float dn = baseline - margin;
-
-  if (up < 0) up = 0; if (up > 4095) up = 4095;
-  if (dn < 0) dn = 0; if (dn > 4095) dn = 4095;
-
-  threshUp = (uint16_t)up;
-  threshDn = (uint16_t)dn;
+  float margin = MIN_RELATIVE_DELTA * fabsf(baseline);  // exactly 5% of |baseline|
+  threshUp = baseline + margin;
+  threshDn = baseline - margin;
 }
 
 void autoCalibrate() {
   const uint32_t tStart = millis();
   uint32_t n = 0;
-  double mean = 0.0, M2 = 0.0;
+  double mean = 0.0;
+  double M2   = 0.0;
 
   while ((millis() - tStart) < CAL_TIME_MS) {
     int16_t d = readDifferenced();
     n++;
     double x = (double)d;
-    double delta = x - mean;
+    double delta  = x - mean;
     mean += delta / (double)n;
     double delta2 = x - mean;
     M2 += delta * delta2;
+
     delay(LOOP_PERIOD_MS);
   }
 
@@ -106,23 +93,23 @@ void autoCalibrate() {
     noiseStd = (float)sqrt(M2 / (double)(n - 1));
   } else {
     baseline = 0.0f;
-    noiseStd = 5.0f;
+    noiseStd = 0.0f;
   }
 
   emaDiff = baseline;
   computeThresholds();
 
   Serial.println(F("\n== Auto-Calibration Complete =="));
-  Serial.print(F("Samples: ")); Serial.println((uint32_t)n);
-  Serial.print(F("Baseline (diff counts): ")); Serial.println(baseline, 2);
-  Serial.print(F("Noise stdev (counts): ")); Serial.println(noiseStd, 2);
-  Serial.print(F("ThreshUp (base+margin): ")); Serial.println(threshUp);
-  Serial.print(F("ThreshDn (base-margin): ")); Serial.println(threshDn);
-  Serial.print(F("Rel margin (MIN_RELATIVE_DELTA): ")); Serial.println(MIN_RELATIVE_DELTA, 3);
+  Serial.print(F("Samples: "));   Serial.println((uint32_t)n);
+  Serial.print(F("Baseline: "));  Serial.println(baseline, 2);
+  Serial.print(F("Noise σ: "));   Serial.println(noiseStd, 2);
+  Serial.print(F("ThreshUp: "));  Serial.println(threshUp, 2);
+  Serial.print(F("ThreshDn: "));  Serial.println(threshDn, 2);
+  Serial.print(F("Delta %: "));   Serial.println(MIN_RELATIVE_DELTA * 100.0f, 2);
   Serial.println(F("================================\n"));
 }
 
-// -------------------- ARDUINO LIFECYCLE --------------------
+// -------------------- SETUP --------------------
 void setup() {
   Serial.begin(115200);
   delay(200);
@@ -136,71 +123,65 @@ void setup() {
   analogReadResolution(ADC_BITS);
   analogSetAttenuation(ADC_ATTEN);
 
-  Serial.println(F("\nIR Phototransistor (Direct) with LED chopping — Relative threshold"));
-  Serial.println(F("Calibrating... keep the beam path clear\n"));
+  Serial.println(F("\nIR Phototransistor — ±5% change detector\n"));
+  Serial.println(F("Calibrating... keep beam clear.\n"));
 
   autoCalibrate();
 }
 
+// -------------------- LOOP --------------------
 void loop() {
   int16_t diff = readDifferenced();
   emaDiff = EMA_ALPHA * diff + (1.0f - EMA_ALPHA) * emaDiff;
 
-  // Hysteresis windows based on chosen polarity
-  uint16_t enterUp   = threshUp;                     // rising enter
-  int32_t  exitUp    = (int32_t)threshUp  - HYSTERESIS_COUNTS; // rising exit
-  uint16_t enterDown = threshDn;                     // falling enter (diff <= threshDn)
-  int32_t  exitDown  = (int32_t)threshDn + HYSTERESIS_COUNTS; // falling exit
+  // Define the band and hysteresis in float
+  float enterLow  = threshDn;
+  float enterHigh = threshUp;
+  float exitLow   = threshDn + (float)HYSTERESIS_COUNTS;
+  float exitHigh  = threshUp - (float)HYSTERESIS_COUNTS;
 
-  if (DETECT_RISE) {
-    if (!detected) {
-      if (diff >= (int32_t)enterUp) {
-        if (++hitCount >= DEBOUNCE_HITS_REQUIRED) {
-          detected = true; hitCount = 0; clearCount = 0;
-          digitalWrite(STATUS_LED_PIN, HIGH);
-          Serial.println(F("DETECTED (rise) ↑"));
-        }
-      } else hitCount = 0;
+  // ------ ON detection: outside ±5% band ------
+  if (!detected) {
+    if ((float)diff <= enterLow || (float)diff >= enterHigh) {
+      if (++hitCount >= DEBOUNCE_HITS_REQUIRED) {
+        detected   = true;
+        hitCount   = 0;
+        clearCount = 0;
+        digitalWrite(STATUS_LED_PIN, HIGH);
+        Serial.println(F("DETECTED (|Δ| > 5%)"));
+      }
     } else {
-      if (diff <= exitUp) {
-        if (++clearCount >= DEBOUNCE_CLEAR_REQUIRED) {
-          detected = false; clearCount = 0; hitCount = 0;
-          digitalWrite(STATUS_LED_PIN, LOW);
-          Serial.println(F("CLEARED (rise) ↓"));
-        }
-      } else clearCount = 0;
+      hitCount = 0;
     }
-  } else { // DETECT DROP
-    if (!detected) {
-      if (diff <= (int32_t)enterDown) {
-        if (++hitCount >= DEBOUNCE_HITS_REQUIRED) {
-          detected = true; hitCount = 0; clearCount = 0;
-          digitalWrite(STATUS_LED_PIN, HIGH);
-          Serial.println(F("DETECTED (drop) ↓"));
-        }
-      } else hitCount = 0;
+  }
+  // ------ OFF detection: back inside band (with hysteresis) ------
+  else {
+    if ((float)diff > exitLow && (float)diff < exitHigh) {
+      if (++clearCount >= DEBOUNCE_CLEAR_REQUIRED) {
+        detected   = false;
+        clearCount = 0;
+        hitCount   = 0;
+        digitalWrite(STATUS_LED_PIN, LOW);
+        Serial.println(F("CLEARED (|Δ| ≤ 5%)"));
+      }
     } else {
-      if (diff >= exitDown) {
-        if (++clearCount >= DEBOUNCE_CLEAR_REQUIRED) {
-          detected = false; clearCount = 0; hitCount = 0;
-          digitalWrite(STATUS_LED_PIN, LOW);
-          Serial.println(F("CLEARED (drop) ↑"));
-        }
-      } else clearCount = 0;
+      clearCount = 0;
     }
   }
 
-  // Telemetry
+  // Debug print (includes % change)
   static uint32_t lastPrint = 0;
   uint32_t now = millis();
   if (now - lastPrint >= 100) {
     lastPrint = now;
+    float delta      = (float)diff - baseline;
+    float relChange  = (baseline != 0.0f) ? (delta / baseline * 100.0f) : 0.0f;
+
     Serial.print(F("diff="));   Serial.print(diff);
-    Serial.print(F("  ema="));  Serial.print(emaDiff, 1);
-    Serial.print(F("  base=")); Serial.print(baseline, 1);
-    Serial.print(F("  thrUp="));Serial.print(threshUp);
-    Serial.print(F("  thrDn="));Serial.print(threshDn);
-    Serial.print(F("  mode=")); Serial.print(DETECT_RISE ? F("RISE") : F("DROP"));
+    Serial.print(F("  base=")); Serial.print(baseline, 2);
+    Serial.print(F("  up="));   Serial.print(threshUp, 2);
+    Serial.print(F("  dn="));   Serial.print(threshDn, 2);
+    Serial.print(F("  d%="));   Serial.print(relChange, 2);
     Serial.print(F("  state="));Serial.println(detected ? F("ON") : F("OFF"));
   }
 
