@@ -12,20 +12,20 @@
 // -------------------- TUNABLES --------------------
 static const uint8_t  ADC_BITS               = 12;
 static const adc_attenuation_t ADC_ATTEN     = ADC_11db;
-static const uint16_t LED_SETTLE_US          = 200;
-static const uint8_t  SAMPLES_PER_PHASE      = 8;
+static const uint16_t LED_SETTLE_US          = 50;
+static const uint8_t  SAMPLES_PER_PHASE      = 2;
 static const uint16_t CAL_TIME_MS            = 3000;
 
-// Relative change: 0.15 = 15%
-static const float    MIN_RELATIVE_DELTA     = 0.15f;
+// Relative change: 0.10 = 10%
+static const float    MIN_RELATIVE_DELTA     = 0.1f;
 
 // Noise/absolute safety floors
-static const float    THRESH_NOISE_MULT      = 6.0f;
+static const float    THRESH_NOISE_MULT      = 4.0f;
 static const uint16_t THRESH_MIN_MARGIN      = 40;
 static const uint16_t HYSTERESIS_COUNTS      = 20;
-static const uint8_t  DEBOUNCE_HITS_REQUIRED = 3;
+static const uint8_t  DEBOUNCE_HITS_REQUIRED = 1;
 static const uint8_t  DEBOUNCE_CLEAR_REQUIRED= 3;
-static const uint16_t LOOP_PERIOD_MS         = 5;
+static const uint16_t LOOP_PERIOD_MS         = 1;
 
 // true  -> detect RISE from baseline
 // false -> detect DROP from baseline
@@ -187,23 +187,37 @@ bool DetectStep(void) {
 
 // Wrapper used by FSM: actuate syringe, then look for bubbles
 bool ActuateSyringeCheckForBubbles(void) {
-  const uint32_t windowMs = 500;  // detection window after actuation
-  const uint32_t tStart   = millis();
+  // 1) Re-calibrate with clear beam before motion
+  autoCalibrate();
+
+  const uint32_t extendMs  = 3000;
+  const uint32_t retractMs = 3000;
   bool anyDetected = false;
 
+  // 2) Enable driver and extend while continuously checking for bubbles
   setEnable();
   setExtend();
 
-  while ((millis() - tStart) < windowMs) {
+  uint32_t tStart = millis();
+  while ((millis() - tStart) < extendMs) {
+    if (DetectStep()) {
+      anyDetected = true;
+    }
+    // keep this small so you don't miss short bubbles
+    delay(LOOP_PERIOD_MS);
+  }
+
+  // 3) Retract for 3 s, still checking for bubbles
+  setRetract();
+  tStart = millis();
+  while ((millis() - tStart) < retractMs) {
     if (DetectStep()) {
       anyDetected = true;
     }
     delay(LOOP_PERIOD_MS);
   }
 
-  setRetract();
-  delay(3000);
-
+  // 4) Disable driver at the end of the cycle
   setDisable();
 
   return anyDetected;
