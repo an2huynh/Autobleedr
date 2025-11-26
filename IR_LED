@@ -10,24 +10,24 @@
 // -------------------- TUNABLES --------------------
 const uint8_t  ADC_BITS               = 12;
 const adc_attenuation_t ADC_ATTEN     = ADC_11db;
-const uint16_t LED_SETTLE_US          = 200;
-const uint8_t  SAMPLES_PER_PHASE      = 8;
+const uint16_t LED_SETTLE_US          = 50;
+const uint8_t  SAMPLES_PER_PHASE      = 2;
 const uint16_t CAL_TIME_MS            = 3000;
 
 // ±5% change detection
-const float    MIN_RELATIVE_DELTA     = 0.2f;
+const float    MIN_RELATIVE_DELTA     = 0.1f;
 
 // Hysteresis + debounce
 const uint16_t HYSTERESIS_COUNTS      = 20;
-const uint8_t  DEBOUNCE_HITS_REQUIRED = 3;
+const uint8_t  DEBOUNCE_HITS_REQUIRED = 1;
 const uint8_t  DEBOUNCE_CLEAR_REQUIRED= 3;
-const uint16_t LOOP_PERIOD_MS         = 5;
+const uint16_t LOOP_PERIOD_MS         = 1;
 
 // -------------------- RUNTIME STATE --------------------
 float    baseline = 0.0f;
 float    noiseStd = 5.0f;  // just for info printing
-float    threshUp = 0.0f;  // baseline + 5%
-float    threshDn = 0.0f;  // baseline - 5%
+float    threshUp = 0.0f;  // baseline + 10%
+float    threshDn = 0.0f;  // baseline - 10%
 bool     detected = false;
 uint8_t  hitCount = 0;
 uint8_t  clearCount = 0;
@@ -85,7 +85,7 @@ void autoCalibrate() {
     double delta2 = x - mean;
     M2 += delta * delta2;
 
-    delay(LOOP_PERIOD_MS);
+    //delay(LOOP_PERIOD_MS);
   }
 
   if (n > 1) {
