@@ -21,6 +21,3 @@ bool DeBubbler(void) {
   analogWrite(pwm_pin, 160); delay(3000);
   analogWrite(pwm_pin, 0);
 }
-  
-  return true;
-}

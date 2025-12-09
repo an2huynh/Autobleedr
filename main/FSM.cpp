@@ -45,7 +45,7 @@ void OutputFunction(FSMType *fsm) {
     case STATE_BLEED_ACTUATE:
       (void)ActuateSyringe();
       if (consumeAbort(fsm)) break;
-      fsm->CurrentState = STATE_BLEED_HAND_PRESS;
+      fsm->CurrentState = STATE_IDLE; // !!! currently set to do one actuate step, then back to idle
       break;
 
     case STATE_BLEED_HAND_PRESS:
