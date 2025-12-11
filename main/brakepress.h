@@ -16,6 +16,7 @@
 
 #define R_SENSE    0.110f
 #define DRIVER_ADDR 0b00
+#define TARGET_PRESSES 2
 
 void stepper_reset(void);
 

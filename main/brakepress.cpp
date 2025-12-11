@@ -1,32 +1,36 @@
 #include "brakepress.h"
 
 // === Your original globals (kept) ===
-uint16_t stop_condition = 66;   // default SGTHRS
-bool     direction      = true; // true=extend, false=retract
-uint32_t counter        = 0;    // step count from extend phase
-bool     running        = false;
+uint16_t stop_condition = 66;  // what to stop at
+bool direction = true; // true is pulling, false is going back -> HIGH is clockwise, LOW is counter clockwise
+uint32_t counter = 0; // counts how many steps to go back
+bool running = false;  // What external files should be looking at
+uint8_t presses = 0; // tracks how many squeezes we have
 
+
+hw_timer_t *timer0 = nullptr;
 HardwareSerial& TMCSerial = Serial2;
-TMC2209Stepper   driver{&TMCSerial, R_SENSE, DRIVER_ADDR};
-hw_timer_t*      timer0   = nullptr;
+TMC2209Stepper driver{&TMCSerial, R_SENSE, DRIVER_ADDR};
 
-int num_presses = 0;
-int max_presses = 3;
 
 void stepper_reset() {
   counter = 0;
+  presses = 0;
   direction = true;
+  running = false;
 
   digitalWrite(STEP, HIGH);
   digitalWrite(DIR, HIGH);
 
   digitalWrite(EN, HIGH);
+  timerStop(timer0);
   timerRestart(timer0);
 }
 
 
 void stepper_start() {
   digitalWrite(EN, LOW);
+  running = true;
 
   timerRestart(timer0);
   timerStart(timer0);
@@ -36,6 +40,7 @@ void stepper_start() {
 void stepper_stop() {
   digitalWrite(DIR, LOW);
   direction = false;
+  presses = TARGET_PRESSES;
   while (counter > 0);
 
   stepper_reset();
@@ -53,16 +58,19 @@ void IRAM_ATTR step_timer() {
 
 
   if (!direction && counter == 0) {
-    timerStop(timer0);
-    running = false;
-  } else {
-    running = true;
+    if (presses == TARGET_PRESSES) {
+      stepper_reset();
+    } else {
+      direction = true;
+      digitalWrite(DIR, HIGH);
+    }
   }
 }
 
 
 void interrupt() {
   direction = false;
+  presses += 1;
   digitalWrite(DIR, LOW);
 }
 
@@ -102,24 +110,9 @@ void stepper_setup() {
   attachInterrupt(digitalPinToInterrupt(DIAG), interrupt, HIGH);
 }
 
-
-void main_stepper_setup() {
-  delay(1500); 
-  Serial.begin(BAUD);
-  stepper_setup();
-}
-
 void HandBrakePress() {
-  num_presses = 0;
+  stepper_reset();
+  stepper_start();
 
-  while (num_presses < max_presses) {
-    delay(100);
-    if (!running) {
-      //Serial.println("Stepper reset\n");
-      running = true;
-      stepper_reset();
-      num_presses += 1;
-      stepper_start();
-    }
-  }
+  while (running);
 }
