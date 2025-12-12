@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#define LED_PIN   2
+
 typedef enum {
   STATE_IDLE = 0,
   STATE_ACTUATE_AND_CHECK,
@@ -20,5 +22,6 @@ typedef struct {
 void InitializeFSM(FSMType *fsm);
 void OutputFunction(FSMType *fsm);
 void RequestStart(FSMType *fsm);
+void ToggleLight(void);
 
 #endif

@@ -5,8 +5,8 @@
 #include <math.h>
 
 // -------------------- PINS --------------------
-#define IR_LED_PIN        25
-#define SENSOR_PIN        34
+#define IR_LED_PIN        32
+#define SENSOR_PIN        35
 #define STATUS_LED_PIN     2
 
 // -------------------- TUNABLES --------------------

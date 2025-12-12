@@ -5,24 +5,28 @@
 #include "debubble.h"
 #include "detect.h"
 
-static constexpr int PIN_START = 0; // boot pin, do not activate when EN pin is pressed
+static constexpr int PIN_START = 0; // boot pin, do not press when EN pin is pressed
 static FSMType g_fsm;
 
 void IRAM_ATTR onStartRise() { RequestStart(&g_fsm); }
 
 void setup() {
+  Serial.begin(9600);
+  delay(600);
+  Serial.println("Setup");
   InitializeSyringePins();
-  main_stepper_setup();
+  stepper_setup();
   DetectInit();
+  InitializeDebubblerPins();
 
+  // attach boot pin to start/stop
   pinMode(PIN_START, INPUT);
   attachInterrupt(digitalPinToInterrupt(PIN_START), onStartRise, RISING);
-
-  digitalWrite(2 , HIGH);
 
   InitializeFSM(&g_fsm);
 }
 
 void loop() {
+  //ToggleLight();
   OutputFunction(&g_fsm);
 }
