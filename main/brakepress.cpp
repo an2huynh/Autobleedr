@@ -1,7 +1,7 @@
 #include "brakepress.h"
 
 // === Your original globals (kept) ===
-uint16_t stop_condition = 66;  // what to stop at
+uint16_t stop_condition = 55;  // what to stop at
 bool direction = true; // true is pulling, false is going back -> HIGH is clockwise, LOW is counter clockwise
 uint32_t counter = 0; // counts how many steps to go back
 bool running = false;  // What external files should be looking at
@@ -41,7 +41,7 @@ void stepper_stop() {
   digitalWrite(DIR, LOW);
   direction = false;
   presses = TARGET_PRESSES;
-  while (counter > 0);
+  while (counter > 0) {}
 
   stepper_reset();
 }
@@ -110,9 +110,12 @@ void stepper_setup() {
   attachInterrupt(digitalPinToInterrupt(DIAG), interrupt, HIGH);
 }
 
+
 void HandBrakePress() {
   stepper_reset();
   stepper_start();
 
-  while (running);
+  while (running) {
+    // Serial.println(presses);
+  }
 }

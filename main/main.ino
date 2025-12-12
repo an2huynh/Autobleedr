@@ -19,6 +19,9 @@ void setup() {
   DetectInit();
   InitializeDebubblerPins();
 
+  // digitalWrite(33,  HIGH);
+
+
   // attach boot pin to start/stop
   pinMode(PIN_START, INPUT);
   attachInterrupt(digitalPinToInterrupt(PIN_START), onStartRise, RISING);
@@ -27,6 +30,10 @@ void setup() {
 }
 
 void loop() {
+  // digitalWrite(25, LOW);
+  // delay(3000);
+  // digitalWrite(25, HIGH);
+  // delay(3000);
   //ToggleLight();
   OutputFunction(&g_fsm);
 }

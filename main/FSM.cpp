@@ -36,7 +36,7 @@ void RequestStart(FSMType *fsm) {
     fsm->startRequested = true;
   } else {
     Serial.print("Set Stop\n");
-    fsm->abortRequested = true;
+    //fsm->abortRequested = true;
   }
 }
 
@@ -100,7 +100,7 @@ void OutputFunction(FSMType *fsm) {
         break;
       }
       Serial.print("Continuing? ");
-      Serial.print(proceed);
+      Serial.println(proceed);
       fsm->CurrentState = proceed ? STATE_BLEED_ACTUATE : STATE_IDLE;
     } break;
 
