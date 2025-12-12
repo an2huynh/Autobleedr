@@ -27,6 +27,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(PIN_START), onStartRise, RISING);
 
   InitializeFSM(&g_fsm);
+  // HandBrakePress();
 }
 
 void loop() {
@@ -36,4 +37,5 @@ void loop() {
   // delay(3000);
   //ToggleLight();
   OutputFunction(&g_fsm);
+  // HandBrakePress();
 }

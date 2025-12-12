@@ -1,7 +1,7 @@
 #include "brakepress.h"
 
 // === Your original globals (kept) ===
-uint16_t stop_condition = 55;  // what to stop at
+uint16_t stop_condition = 70;  // what to stop at
 bool direction = true; // true is pulling, false is going back -> HIGH is clockwise, LOW is counter clockwise
 uint32_t counter = 0; // counts how many steps to go back
 bool running = false;  // What external files should be looking at
@@ -117,5 +117,6 @@ void HandBrakePress() {
 
   while (running) {
     // Serial.println(presses);
+    delay(100);
   }
 }
