@@ -9,6 +9,7 @@
 #define SENSOR_PIN        35
 #define STATUS_LED_PIN     2
 
+
 // -------------------- TUNABLES --------------------
 static const uint8_t  ADC_BITS               = 12;
 static const adc_attenuation_t ADC_ATTEN     = ADC_11db;
@@ -39,6 +40,7 @@ static float threshDn = 0.0f;
 static bool     detected = false;
 static uint8_t  hitCount = 0;
 static uint8_t  clearCount = 0;
+static uint8_t pushCycle = 0;
 
 static const float EMA_ALPHA = 0.25f;
 static float emaDiff = 0.0f;
@@ -139,6 +141,13 @@ void DetectInit(void) {
   autoCalibrate();
 }
 
+void DetectResetSession() { 
+  pushCycle = 0; 
+  detected = false;
+  hitCount = 0;
+  digitalWrite(STATUS_LED_PIN, LOW);
+  }
+
 bool DetectStep(void) {
   int16_t diff = readDifferenced();
   emaDiff = EMA_ALPHA * diff + (1.0f - EMA_ALPHA) * emaDiff;
@@ -189,9 +198,10 @@ bool DetectStep(void) {
 bool ActuateSyringeCheckForBubbles(void) {
   autoCalibrate();
 
-  const uint32_t extendMs  = 5000;
+  const uint32_t extendMs  = 6000;
+  const uint32_t extendMsAlt = 3000;
   const uint32_t retractMs = 10000;
-  const uint32_t postMs    = 2000;   // 1–2 seconds after retract (set to 1000 or 2000)
+  const uint32_t postMs    = 4000;   // 1–2 seconds after retract (set to 1000 or 2000)
 
   bool anyDetected = false;
 
@@ -199,10 +209,25 @@ bool ActuateSyringeCheckForBubbles(void) {
 
   // 1) Extend WITHOUT detection (first step)
   setExtend();
-  delay(extendMs);
+  if (pushCycle == 0) {
+    delay(extendMs);
+    pushCycle = 1;
+  }
+  else {
+    delay (extendMsAlt);
+    pushCycle = 0;
+  }
+  
+
+  setDisable();
+  delay(1000); // add a one second delay before the linear actuator switches direction to reduce shearing forces
 
   // 2) Retract WITH detection (second step)
+  setEnable();
   setRetract();
+
+  delay(2000); // Delay 2.5 second to avoid issues with the sensor moving due to force from the syringe
+
   uint32_t tStart = millis();
   while ((millis() - tStart) < retractMs) {
     if (DetectStep()) anyDetected = true;

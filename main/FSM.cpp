@@ -7,8 +7,6 @@
 
 bool light = false;
 
-int count = 0;
-
 void InitializeFSM(FSMType *fsm) {
   // initialize light pin
   pinMode(LED_PIN, OUTPUT);
@@ -18,6 +16,7 @@ void InitializeFSM(FSMType *fsm) {
   fsm->startRequested = false;
   fsm->abortRequested = false;
   fsm->stopAllowedAtMs  = 0;  
+  fsm->noBubbleStreak = 0;
 }
 
 // If idle, request start; otherwise request abort-after-step.
@@ -41,6 +40,7 @@ static inline bool consumeAbort(FSMType *fsm) {
     Serial.print("Consume Abort\n");
     fsm->abortRequested = false;
     fsm->CurrentState = STATE_IDLE;
+    fsm->noBubbleStreak = 0;
     return true;
   }
   return false;
@@ -52,9 +52,12 @@ void OutputFunction(FSMType *fsm) {
   switch (fsm->CurrentState) {
     case STATE_IDLE:
       if (fsm->startRequested) {
+        
         digitalWrite(LED_PIN, LOW);
         Serial.print("Start\n");
         fsm->startRequested = false;
+        DetectResetSession();
+        fsm->noBubbleStreak = 0;
         fsm->stopAllowedAtMs = millis() + 1000;
         fsm->CurrentState = STATE_ACTUATE_AND_CHECK;   // or STATE_ACTUATE_AND_CHECK
       }
@@ -97,22 +100,27 @@ void OutputFunction(FSMType *fsm) {
         Serial.print("Stop\n");
         break;
       }
-      Serial.print("Continuing? ");
+      Serial.print("Bubbles? ");
       Serial.println(proceed);
 
-      fsm->CurrentState = proceed ? STATE_BLEED_HAND_PRESS : STATE_IDLE;
-
-      if (count == 0) {
-        count = 1;
-        fsm->CurrentState = STATE_BLEED_HAND_PRESS;
-      }
-
       if (proceed) {
+        // bubbles detected: keep going, reset "no bubble" streak
+        fsm->noBubbleStreak = 0;
+        fsm->CurrentState = STATE_BLEED_HAND_PRESS;
         digitalWrite(LED_PIN, HIGH);
-      }
-      else {
+      } else {
+        // no bubbles this cycle: increment streak; stop only after 2 in a row
+        fsm->noBubbleStreak++;
         digitalWrite(LED_PIN, LOW);
+
+        if (fsm->noBubbleStreak >= 2) {
+          fsm->CurrentState = STATE_IDLE;
+        } else {
+          // force at least one more cycle to confirm it's truly clean
+          fsm->CurrentState = STATE_BLEED_HAND_PRESS;
+        }
       }
+
     } break;
 
     default:

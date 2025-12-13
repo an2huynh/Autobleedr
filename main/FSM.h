@@ -2,6 +2,7 @@
 #define INC_FSM_H_
 
 #include <stdbool.h>
+#include <Arduino.h>
 
 #define LED_PIN   2
 
@@ -17,7 +18,8 @@ typedef struct {
   FSMState CurrentState;
   volatile bool startRequested;   // consumed in IDLE to start a cycle
   volatile bool abortRequested;   // set during any active state to go IDLE after step
-  unsigned long stopAllowedAtMs;  
+  unsigned long stopAllowedAtMs; 
+  uint8_t noBubbleStreak; 
 } FSMType;
 
 void InitializeFSM(FSMType *fsm);

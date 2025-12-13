@@ -6,6 +6,8 @@
 // Initialize IR LED, ADC, and auto-calibrate baseline/noise
 void DetectInit(void);
 
+void DetectResetSession(void);
+
 // Perform one detection step; returns current "detected" state
 bool DetectStep(void);
 
