@@ -12,12 +12,12 @@ void IRAM_ATTR onStartRise() { RequestStart(&g_fsm); }
 
 void setup() {
   Serial.begin(9600);
-  delay(600);
-  Serial.println("Setup");
+  InitializeDebubblerPins();
   InitializeSyringePins();
   stepper_setup();
   DetectInit();
-  InitializeDebubblerPins();
+  delay(600);
+  Serial.println("Setup");
 
   // digitalWrite(33,  HIGH);
 

@@ -17,11 +17,11 @@ typedef struct {
   FSMState CurrentState;
   volatile bool startRequested;   // consumed in IDLE to start a cycle
   volatile bool abortRequested;   // set during any active state to go IDLE after step
+  unsigned long stopAllowedAtMs;  
 } FSMType;
 
 void InitializeFSM(FSMType *fsm);
 void OutputFunction(FSMType *fsm);
 void RequestStart(FSMType *fsm);
-void ToggleLight(void);
 
 #endif

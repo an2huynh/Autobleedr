@@ -1,8 +1,6 @@
 #include "syringe.h"
 #include <Arduino.h>
 
-#define SYRINGE_PRESS_MS 8000
-
 static inline unsigned long clampHz(int hz) { return hz <= 0 ? 1UL : (unsigned long)hz; }
 
 void InitializeSyringePins(void) {
@@ -49,6 +47,6 @@ void setDisable() {
 
 bool ActuateSyringe(void) {
   syringeExtend(SYRINGE_PRESS_MS);
-  syringeRetract(SYRINGE_PRESS_MS);   
+  syringeRetract(SYRINGE_PRESS_MS + 2000);   
   return true;
 }

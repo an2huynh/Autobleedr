@@ -5,6 +5,8 @@
 #define SYR_DIR_PIN 25 //1=extend, 0=contract.
 #define SYR_EN_PIN  33 //1=on, 0=off
 
+#define SYRINGE_PRESS_MS 8000
+
 void InitializeSyringePins(void);
 void syringeExtend(int ms);
 void syringeRetract(int ms);

@@ -190,8 +190,8 @@ bool ActuateSyringeCheckForBubbles(void) {
   // 1) Re-calibrate with clear beam before motion
   autoCalibrate();
 
-  const uint32_t extendMs  = 3000;
-  const uint32_t retractMs = 3000;
+  const uint32_t extendMs  = 5000;
+  const uint32_t retractMs = 10000;
   bool anyDetected = false;
 
   // 2) Enable driver and extend while continuously checking for bubbles
@@ -201,7 +201,7 @@ bool ActuateSyringeCheckForBubbles(void) {
   uint32_t tStart = millis();
   while ((millis() - tStart) < extendMs) {
     if (DetectStep()) {
-      anyDetected = true;
+      anyDetected = false;
     }
     // keep this small so you don't miss short bubbles
     delay(LOOP_PERIOD_MS);
@@ -219,6 +219,13 @@ bool ActuateSyringeCheckForBubbles(void) {
 
   // 4) Disable driver at the end of the cycle
   setDisable();
+
+  while ((millis() - tStart) < 2000) {
+    if (DetectStep()) {
+      anyDetected = true;
+    }
+    delay(LOOP_PERIOD_MS);
+  }
 
   return anyDetected;
 }

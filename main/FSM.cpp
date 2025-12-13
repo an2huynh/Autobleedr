@@ -7,16 +7,7 @@
 
 bool light = false;
 
-void ToggleLight() {
-  // for testing purposes, we toggle light
-  if (light) {
-    digitalWrite(LED_PIN, LOW);
-    light = false;
-  } else {
-    digitalWrite(LED_PIN, HIGH);
-    light = true;
-  }
-}
+int count = 0;
 
 void InitializeFSM(FSMType *fsm) {
   // initialize light pin
@@ -26,6 +17,7 @@ void InitializeFSM(FSMType *fsm) {
   fsm->CurrentState   = STATE_IDLE;
   fsm->startRequested = false;
   fsm->abortRequested = false;
+  fsm->stopAllowedAtMs  = 0;  
 }
 
 // If idle, request start; otherwise request abort-after-step.
@@ -35,8 +27,12 @@ void RequestStart(FSMType *fsm) {
     Serial.print("Set Start\n");
     fsm->startRequested = true;
   } else {
+    if (millis() < fsm->stopAllowedAtMs) {
+      Serial.print("Stop ignored (<1s since start)\n");
+      return;
+    }
     Serial.print("Set Stop\n");
-    //fsm->abortRequested = true;
+    fsm->abortRequested = true;
   }
 }
 
@@ -56,9 +52,11 @@ void OutputFunction(FSMType *fsm) {
   switch (fsm->CurrentState) {
     case STATE_IDLE:
       if (fsm->startRequested) {
+        digitalWrite(LED_PIN, LOW);
         Serial.print("Start\n");
         fsm->startRequested = false;
-        fsm->CurrentState = STATE_BLEED_ACTUATE;   // or STATE_ACTUATE_AND_CHECK
+        fsm->stopAllowedAtMs = millis() + 1000;
+        fsm->CurrentState = STATE_ACTUATE_AND_CHECK;   // or STATE_ACTUATE_AND_CHECK
       }
       break;
 
@@ -101,7 +99,20 @@ void OutputFunction(FSMType *fsm) {
       }
       Serial.print("Continuing? ");
       Serial.println(proceed);
-      fsm->CurrentState = proceed ? STATE_BLEED_ACTUATE : STATE_IDLE;
+
+      fsm->CurrentState = proceed ? STATE_BLEED_HAND_PRESS : STATE_IDLE;
+
+      if (count == 0) {
+        count = 1;
+        fsm->CurrentState = STATE_BLEED_HAND_PRESS;
+      }
+
+      if (proceed) {
+        digitalWrite(LED_PIN, HIGH);
+      }
+      else {
+        digitalWrite(LED_PIN, LOW);
+      }
     } break;
 
     default:
