@@ -20,8 +20,8 @@ static const uint16_t CAL_TIME_MS            = 3000;
 static const float    MIN_RELATIVE_DELTA     = 0.1f;
 
 // Noise/absolute safety floors
-static const float    THRESH_NOISE_MULT      = 4.0f;
-static const uint16_t THRESH_MIN_MARGIN      = 40;
+// static const float    THRESH_NOISE_MULT      = 4.0f;
+// static const uint16_t THRESH_MIN_MARGIN      = 40;
 static const uint16_t HYSTERESIS_COUNTS      = 20;
 static const uint8_t  DEBOUNCE_HITS_REQUIRED = 1;
 static const uint8_t  DEBOUNCE_CLEAR_REQUIRED= 3;
@@ -29,13 +29,13 @@ static const uint16_t LOOP_PERIOD_MS         = 1;
 
 // true  -> detect RISE from baseline
 // false -> detect DROP from baseline
-static const bool     DETECT_RISE            = true;
+// static const bool     DETECT_RISE            = true;
 
 // -------------------- RUNTIME STATE --------------------
 static float    baseline = 0.0f;
 static float    noiseStd = 5.0f;
-static uint16_t threshUp = 0;
-static uint16_t threshDn = 0;
+static float threshUp = 0.0f;
+static float threshDn = 0.0f;
 static bool     detected = false;
 static uint8_t  hitCount = 0;
 static uint8_t  clearCount = 0;
@@ -67,23 +67,27 @@ static int16_t readDifferenced() {
 
 // Compute symmetric thresholds around baseline using a relative margin
 static void computeThresholds() {
-  float relMargin   = MIN_RELATIVE_DELTA * fabsf(baseline);
-  float noiseMargin = THRESH_NOISE_MULT * noiseStd;
-  float absFloor    = (float)THRESH_MIN_MARGIN;
+  float margin = MIN_RELATIVE_DELTA * fabsf(baseline);
 
-  float margin = max(relMargin, max(noiseMargin, absFloor));
+  threshUp = baseline + margin;
+  threshDn = baseline - margin;
 
-  float up = baseline + margin;
-  float dn = baseline - margin;
+  // diff range is approx [-((2^ADC_BITS)-1), +((2^ADC_BITS)-1)]
+  const float DIFF_MAX = (float)((1 << ADC_BITS) - 1);
+  const float DIFF_MIN = -DIFF_MAX;
 
-  if (up < 0) up = 0; if (up > 4095) up = 4095;
-  if (dn < 0) dn = 0; if (dn > 4095) dn = 4095;
-
-  threshUp = (uint16_t)up;
-  threshDn = (uint16_t)dn;
+  if (threshUp > DIFF_MAX) threshUp = DIFF_MAX;
+  if (threshUp < DIFF_MIN) threshUp = DIFF_MIN;
+  if (threshDn > DIFF_MAX) threshDn = DIFF_MAX;
+  if (threshDn < DIFF_MIN) threshDn = DIFF_MIN;
 }
 
+
 static void autoCalibrate() {
+  detected = false;
+  hitCount = 0;
+  clearCount = 0;
+  digitalWrite(STATUS_LED_PIN, LOW);
   const uint32_t tStart = millis();
   uint32_t n = 0;
   double mean = 0.0, M2 = 0.0;
@@ -96,7 +100,7 @@ static void autoCalibrate() {
     mean += delta / (double)n;
     double delta2 = x - mean;
     M2 += delta * delta2;
-    delay(LOOP_PERIOD_MS);
+    //delay(LOOP_PERIOD_MS);
   }
 
   if (n > 1) {
@@ -139,91 +143,77 @@ bool DetectStep(void) {
   int16_t diff = readDifferenced();
   emaDiff = EMA_ALPHA * diff + (1.0f - EMA_ALPHA) * emaDiff;
 
-  uint16_t enterUp   = threshUp;
-  int32_t  exitUp    = (int32_t)threshUp  - HYSTERESIS_COUNTS;
-  uint16_t enterDown = threshDn;
-  int32_t  exitDown  = (int32_t)threshDn + HYSTERESIS_COUNTS;
+  float enterLow  = threshDn;
+  float enterHigh = threshUp;
+  float exitLow   = threshDn + (float)HYSTERESIS_COUNTS;
+  float exitHigh  = threshUp - (float)HYSTERESIS_COUNTS;
 
-  if (DETECT_RISE) {
-    if (!detected) {
-      if (diff >= (int32_t)enterUp) {
-        if (++hitCount >= DEBOUNCE_HITS_REQUIRED) {
-          detected = true; hitCount = 0; clearCount = 0;
-          digitalWrite(STATUS_LED_PIN, HIGH);
-          Serial.println(F("DETECTED (rise)"));
-        }
-      } else hitCount = 0;
+  // If hysteresis collapses the band, disable hysteresis for clearing
+  if (exitLow >= exitHigh) {
+    exitLow = enterLow;
+    exitHigh = enterHigh;
+  }
+
+  if (!detected) {
+    // Detect when diff goes outside band (either direction)
+    if ((float)diff <= enterLow || (float)diff >= enterHigh) {
+      if (++hitCount >= DEBOUNCE_HITS_REQUIRED) {
+        detected = true;
+        hitCount = 0;
+        clearCount = 0;
+        digitalWrite(STATUS_LED_PIN, HIGH);
+        Serial.println(F("DETECTED (outside band)"));
+      }
     } else {
-      if (diff <= exitUp) {
-        if (++clearCount >= DEBOUNCE_CLEAR_REQUIRED) {
-          detected = false; clearCount = 0; hitCount = 0;
-          digitalWrite(STATUS_LED_PIN, LOW);
-          Serial.println(F("CLEARED (rise)"));
-        }
-      } else clearCount = 0;
+      hitCount = 0;
     }
-  } else { // DETECT DROP
-    if (!detected) {
-      if (diff <= (int32_t)enterDown) {
-        if (++hitCount >= DEBOUNCE_HITS_REQUIRED) {
-          detected = true; hitCount = 0; clearCount = 0;
-          digitalWrite(STATUS_LED_PIN, HIGH);
-          Serial.println(F("DETECTED (drop)"));
-        }
-      } else hitCount = 0;
+  } else {
+    // Clear when diff returns inside band (with hysteresis)
+    if ((float)diff > exitLow && (float)diff < exitHigh) {
+      if (++clearCount >= DEBOUNCE_CLEAR_REQUIRED) {
+        detected = false;
+        clearCount = 0;
+        hitCount = 0;
+        digitalWrite(STATUS_LED_PIN, LOW);
+        Serial.println(F("CLEARED (inside band)"));
+      }
     } else {
-      if (diff >= exitDown) {
-        if (++clearCount >= DEBOUNCE_CLEAR_REQUIRED) {
-          detected = false; clearCount = 0; hitCount = 0;
-          digitalWrite(STATUS_LED_PIN, LOW);
-          Serial.println(F("CLEARED (drop)"));
-        }
-      } else clearCount = 0;
+      clearCount = 0;
     }
   }
 
   return detected;
 }
 
-// Wrapper used by FSM: actuate syringe, then look for bubbles
+
 bool ActuateSyringeCheckForBubbles(void) {
-  // 1) Re-calibrate with clear beam before motion
   autoCalibrate();
 
   const uint32_t extendMs  = 5000;
   const uint32_t retractMs = 10000;
+  const uint32_t postMs    = 2000;   // 1–2 seconds after retract (set to 1000 or 2000)
+
   bool anyDetected = false;
 
-  // 2) Enable driver and extend while continuously checking for bubbles
   setEnable();
+
+  // 1) Extend WITHOUT detection (first step)
   setExtend();
+  delay(extendMs);
 
-  uint32_t tStart = millis();
-  while ((millis() - tStart) < extendMs) {
-    if (DetectStep()) {
-      anyDetected = false;
-    }
-    // keep this small so you don't miss short bubbles
-    delay(LOOP_PERIOD_MS);
-  }
-
-  // 3) Retract for 3 s, still checking for bubbles
+  // 2) Retract WITH detection (second step)
   setRetract();
-  tStart = millis();
+  uint32_t tStart = millis();
   while ((millis() - tStart) < retractMs) {
-    if (DetectStep()) {
-      anyDetected = true;
-    }
+    if (DetectStep()) anyDetected = true;
     delay(LOOP_PERIOD_MS);
   }
 
-  // 4) Disable driver at the end of the cycle
+  // 3) Disable motor and keep detecting for postMs
   setDisable();
-
-  while ((millis() - tStart) < 2000) {
-    if (DetectStep()) {
-      anyDetected = true;
-    }
+  uint32_t tPost = millis();
+  while ((millis() - tPost) < postMs) {
+    if (DetectStep()) anyDetected = true;
     delay(LOOP_PERIOD_MS);
   }
 
